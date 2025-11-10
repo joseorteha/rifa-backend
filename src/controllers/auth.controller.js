@@ -60,16 +60,17 @@ export const register = async (req, res) => {
       return res.status(500).json({ error: 'Error al crear usuario' });
     }
 
-    // Enviar email de verificación
-    try {
-      const emailService = process.env.EMAIL_SERVICE === 'gmail' ? gmailService : EmailService;
-      await emailService.sendVerificationEmail(email, verificationToken, nombre);
-      console.log('✅ Email de verificación enviado a:', email);
-    } catch (emailError) {
-      console.error('⚠️ Error al enviar email, pero usuario creado:', emailError);
-      // No fallar el registro si el email falla, solo logear el error
-    }
+    // Enviar email de verificación en background (no esperar)
+    const emailService = process.env.EMAIL_SERVICE === 'gmail' ? gmailService : EmailService;
+    emailService.sendVerificationEmail(email, verificationToken, nombre)
+      .then(() => {
+        console.log('✅ Email de verificación enviado a:', email);
+      })
+      .catch((emailError) => {
+        console.error('⚠️ Error al enviar email, pero usuario creado:', emailError);
+      });
 
+    // Responder inmediatamente sin esperar el email
     res.status(201).json({
       message: 'Usuario registrado. Por favor verifica tu correo electrónico.',
       // Solo mostrar URL en desarrollo
