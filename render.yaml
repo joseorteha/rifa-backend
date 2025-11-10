@@ -1,0 +1,13 @@
+# Render.com deployment configuration
+services:
+  - type: web
+    name: rifa-backend
+    env: node
+    plan: free
+    buildCommand: npm run render-build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        generateValue: true
