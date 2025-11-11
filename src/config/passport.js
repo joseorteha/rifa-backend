@@ -6,14 +6,22 @@ import { supabaseAdmin } from './supabase.js';
 passport.use(new GoogleStrategy.Strategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: `${process.env.BACKEND_URL}/api/auth/google/callback`
+  callbackURL: `${process.env.BACKEND_URL}/api/auth/google/callback`,
+  scope: ['profile', 'email']
 }, async (accessToken, refreshToken, profile, done) => {
   try {
-    const email = profile.emails[0].value;
-    const nombre = profile.displayName;
+    console.log('🔍 Google OAuth - Full Profile:', JSON.stringify(profile, null, 2));
+    
+    const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
+    const nombre = profile.displayName || profile.name?.givenName + ' ' + profile.name?.familyName;
     const googleId = profile.id;
 
-    console.log('🔍 Google OAuth - Profile received:', { email, nombre, googleId });
+    if (!email) {
+      console.error('❌ No email found in Google profile');
+      return done(new Error('No email found in Google profile'), null);
+    }
+
+    console.log('🔍 Google OAuth - Extracted data:', { email, nombre, googleId });
     
     // Buscar usuario existente por email o google_id
     const { data: existingUser, error: searchError } = await supabaseAdmin

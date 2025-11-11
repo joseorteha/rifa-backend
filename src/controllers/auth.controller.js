@@ -133,7 +133,7 @@ export const getProfile = async (req, res) => {
       email: user.email,
       nombre: user.nombre,
       email_verificado: user.email_verificado,
-      fecha_creacion: user.fecha_creacion
+      fecha_creacion: user.fecha_creacion || user.created_at // Compatibilidad
     });
 
   } catch (error) {

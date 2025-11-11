@@ -43,23 +43,30 @@ router.get('/google',
 
 // Callback de Google
 router.get('/google/callback',
-  passport.authenticate('google', { session: false }),
-  (req, res) => {
-    try {
-      // Generar JWT token
-      const token = generateToken(req.user.id);
-      
-      // Redirigir al frontend con el token
-      res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({
-        id: req.user.id,
-        email: req.user.email,
-        nombre: req.user.nombre,
-        email_verificado: req.user.email_verificado
-      }))}`);
-    } catch (error) {
-      console.error('Error en Google callback:', error);
-      res.redirect(`${process.env.FRONTEND_URL}/auth/login?error=auth_failed`);
-    }
+  (req, res, next) => {
+    passport.authenticate('google', { session: false }, (err, user, info) => {
+      try {
+        if (err) {
+          console.error('❌ Passport error:', err);
+          return res.redirect(`${process.env.FRONTEND_URL}/auth/login?error=oauth_error`);
+        }
+        
+        if (!user) {
+          console.error('❌ No user returned from Google OAuth');
+          return res.redirect(`${process.env.FRONTEND_URL}/auth/login?error=no_user`);
+        }
+
+        // Generar JWT token
+        const token = generateToken(user.id);
+        console.log('✅ Token generado para usuario:', user.email);
+        
+        // Redirigir al frontend con el token
+        res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
+      } catch (error) {
+        console.error('❌ Error en Google callback:', error);
+        res.redirect(`${process.env.FRONTEND_URL}/auth/login?error=callback_error`);
+      }
+    })(req, res, next);
   }
 );
 
