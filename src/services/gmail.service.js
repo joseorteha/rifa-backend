@@ -19,6 +19,14 @@ class GmailService {
   async sendVerificationEmail(email, verificationToken, userName = '') {
     const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify?token=${verificationToken}`;
     
+    // Log para debugging en producción
+    console.log('📧 Enviando email...');
+    console.log('- Email destino:', email);
+    console.log('- FRONTEND_URL:', process.env.FRONTEND_URL);
+    console.log('- NODE_ENV:', process.env.NODE_ENV);
+    console.log('- GMAIL_USER:', process.env.GMAIL_USER);
+    console.log('- Verification URL:', verificationUrl);
+    
     const mailOptions = {
       from: `"Rifa Siera Code" <${process.env.GMAIL_USER}>`,
       to: email,
@@ -57,10 +65,14 @@ class GmailService {
 
     try {
       const result = await this.transporter.sendMail(mailOptions);
-      console.log('✅ Email enviado:', result.messageId);
+      console.log('✅ Email enviado correctamente:', result.messageId);
+      console.log('✅ Response:', result.response);
       return { success: true, messageId: result.messageId };
     } catch (error) {
-      console.error('❌ Error al enviar email:', error);
+      console.error('❌ Error detallado al enviar email:');
+      console.error('- Error code:', error.code);
+      console.error('- Error message:', error.message);
+      console.error('- Error stack:', error.stack);
       throw error;
     }
   }
