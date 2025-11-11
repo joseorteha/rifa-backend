@@ -1,19 +1,11 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { v4 as uuidv4 } from 'uuid';
 import { validationResult } from 'express-validator';
 import { supabaseAdmin } from '../config/supabase.js';
-import { EmailService } from '../services/email.service.js';
-import { gmailService } from '../services/gmail.service.js';
 
 // Generar JWT
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
-};
-
-// Generar token de verificación
-const generateVerificationToken = () => {
-  return uuidv4();
 };
 
 // REGISTRO
@@ -41,15 +33,15 @@ export const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const verificationToken = generateVerificationToken();
 
-    // Crear usuario en tabla usuarios
+    // Crear usuario en tabla usuarios (auto-verificado)
     const { data: newUser, error } = await supabaseAdmin
       .from('usuarios')
       .insert({
         email,
         password: hashedPassword,
         nombre,
-        email_verificado: false,
-        verification_token: verificationToken,
+        email_verificado: true, // ✅ Auto-verificado
+        verification_token: null, // No necesita token
         created_at: new Date().toISOString()
       })
       .select()
@@ -60,23 +52,15 @@ export const register = async (req, res) => {
       return res.status(500).json({ error: 'Error al crear usuario' });
     }
 
-    // Enviar email de verificación en background (no esperar)
-    const emailService = process.env.EMAIL_SERVICE === 'gmail' ? gmailService : EmailService;
-    emailService.sendVerificationEmail(email, verificationToken, nombre)
-      .then(() => {
-        console.log('✅ Email de verificación enviado a:', email);
-      })
-      .catch((emailError) => {
-        console.error('⚠️ Error al enviar email, pero usuario creado:', emailError);
-      });
-
-    // Responder inmediatamente sin esperar el email
+    // ✅ Respuesta inmediata sin verificación de email
     res.status(201).json({
-      message: 'Usuario registrado. Por favor verifica tu correo electrónico.',
-      // Solo mostrar URL en desarrollo
-      ...(process.env.NODE_ENV === 'development' && {
-        verificationUrl: `${process.env.FRONTEND_URL}/auth/verify?token=${verificationToken}`
-      })
+      message: 'Usuario registrado exitosamente. Ya puedes iniciar sesión.',
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        nombre: newUser.nombre,
+        email_verificado: true
+      }
     });
 
   } catch (error) {
@@ -112,6 +96,8 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
+    // ✅ Ya no verificar email_verificado - todos pueden hacer login
+
     // Generar token
     const token = generateToken(user.id);
 
@@ -129,102 +115,6 @@ export const login = async (req, res) => {
   } catch (error) {
     console.error('Error en login:', error);
     res.status(500).json({ error: 'Error al iniciar sesión' });
-  }
-};
-
-// VERIFICAR EMAIL
-export const verifyEmail = async (req, res) => {
-  try {
-    const { token } = req.params;
-
-    // Buscar usuario con ese token
-    const { data: user, error } = await supabaseAdmin
-      .from('usuarios')
-      .select('*')
-      .eq('verification_token', token)
-      .single();
-
-    if (error || !user) {
-      return res.status(400).json({ error: 'Token de verificación inválido' });
-    }
-
-    if (user.email_verificado) {
-      return res.json({ message: 'El correo ya fue verificado anteriormente' });
-    }
-
-    // Actualizar usuario
-    const { error: updateError } = await supabaseAdmin
-      .from('usuarios')
-      .update({ 
-        email_verificado: true, 
-        verification_token: null 
-      })
-      .eq('id', user.id);
-
-    if (updateError) {
-      return res.status(500).json({ error: 'Error al verificar correo' });
-    }
-
-    res.json({ message: 'Correo verificado exitosamente. Ya puedes iniciar sesión.' });
-
-  } catch (error) {
-    console.error('Error en verifyEmail:', error);
-    res.status(500).json({ error: 'Error al verificar correo' });
-  }
-};
-
-// REENVIAR VERIFICACIÓN
-export const resendVerification = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { email } = req.body;
-
-    const { data: user, error } = await supabaseAdmin
-      .from('usuarios')
-      .select('*')
-      .eq('email', email)
-      .single();
-
-    if (error || !user) {
-      return res.status(404).json({ error: 'Usuario no encontrado' });
-    }
-
-    if (user.email_verificado) {
-      return res.json({ message: 'El correo ya está verificado' });
-    }
-
-    const verificationToken = generateVerificationToken();
-
-    await supabaseAdmin
-      .from('usuarios')
-      .update({ verification_token: verificationToken })
-      .eq('id', user.id);
-
-    // Enviar email de verificación
-    try {
-      const emailService = process.env.EMAIL_SERVICE === 'gmail' ? gmailService : EmailService;
-      await emailService.sendVerificationEmail(email, verificationToken, user.nombre);
-      console.log('✅ Email de verificación reenviado a:', email);
-    } catch (emailError) {
-      console.error('⚠️ Error al reenviar email:', emailError);
-      return res.status(500).json({ error: 'Error al enviar el correo de verificación' });
-    }
-
-    res.json({ 
-      message: 'Correo de verificación enviado. Revisa tu bandeja de entrada.',
-      // Solo mostrar URL en desarrollo  
-      ...(process.env.NODE_ENV === 'development' && {
-        verificationUrl: `${process.env.FRONTEND_URL}/auth/verify?token=${verificationToken}`
-      })
-    });
-
-  } catch (error) {
-    console.error('Error en resendVerification:', error);
-    res.status(500).json({ error: 'Error al reenviar verificación' });
   }
 };
 
