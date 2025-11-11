@@ -35,8 +35,6 @@ export const verifyToken = async (req, res, next) => {
 };
 
 export const verifyEmailVerified = (req, res, next) => {
-  if (!req.user.email_verificado) {
-    return res.status(403).json({ error: 'Debes verificar tu correo electrónico' });
-  }
+  // ✅ Ya no verificar email - todos los usuarios están auto-verificados
   next();
 };

@@ -31,18 +31,16 @@ export const register = async (req, res) => {
 
     // Hash de la contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
-    const verificationToken = generateVerificationToken();
 
     // Crear usuario en tabla usuarios (auto-verificado)
     const { data: newUser, error } = await supabaseAdmin
       .from('usuarios')
       .insert({
         email,
-        password: hashedPassword,
+        password_hash: hashedPassword, // ✅ Nombre correcto de columna
         nombre,
         email_verificado: true, // ✅ Auto-verificado
-        verification_token: null, // No necesita token
-        created_at: new Date().toISOString()
+        google_id: null // No es usuario OAuth
       })
       .select()
       .single();
@@ -90,8 +88,15 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
+    // Verificar si es usuario OAuth (sin contraseña)
+    if (!user.password_hash) {
+      return res.status(401).json({ 
+        error: 'Esta cuenta fue creada con Google. Usa "Continuar con Google" para iniciar sesión.' 
+      });
+    }
+
     // Verificar contraseña
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
@@ -128,7 +133,7 @@ export const getProfile = async (req, res) => {
       email: user.email,
       nombre: user.nombre,
       email_verificado: user.email_verificado,
-      created_at: user.created_at
+      fecha_creacion: user.fecha_creacion
     });
 
   } catch (error) {

@@ -11,42 +11,67 @@ passport.use(new GoogleStrategy.Strategy({
   try {
     const email = profile.emails[0].value;
     const nombre = profile.displayName;
+    const googleId = profile.id;
+
+    console.log('🔍 Google OAuth - Profile received:', { email, nombre, googleId });
     
-    // Buscar usuario existente
-    const { data: existingUser } = await supabaseAdmin
+    // Buscar usuario existente por email o google_id
+    const { data: existingUser, error: searchError } = await supabaseAdmin
       .from('usuarios')
       .select('*')
-      .eq('email', email)
-      .single();
+      .or(`email.eq.${email},google_id.eq.${googleId}`)
+      .maybeSingle();
+
+    if (searchError) {
+      console.error('❌ Error buscando usuario:', searchError);
+      return done(searchError, null);
+    }
 
     if (existingUser) {
-      // Usuario ya existe
+      console.log('✅ Usuario existente encontrado:', existingUser.id);
+      // Si el usuario existe pero no tiene google_id, actualizarlo
+      if (!existingUser.google_id) {
+        const { error: updateError } = await supabaseAdmin
+          .from('usuarios')
+          .update({ 
+            google_id: googleId,
+            email_verificado: true 
+          })
+          .eq('id', existingUser.id);
+          
+        if (updateError) {
+          console.error('❌ Error actualizando google_id:', updateError);
+        } else {
+          console.log('✅ Google ID agregado al usuario existente');
+        }
+      }
       return done(null, existingUser);
     }
 
     // Crear nuevo usuario
-    const { data: newUser, error } = await supabaseAdmin
+    console.log('🆕 Creando nuevo usuario con Google OAuth...');
+    const { data: newUser, error: insertError } = await supabaseAdmin
       .from('usuarios')
       .insert({
         email: email,
-        password: 'google_oauth', // Password placeholder para OAuth
         nombre: nombre,
+        google_id: googleId,
         email_verificado: true, // Google ya verificó el email
-        verification_token: null,
-        provider: 'google',
-        google_id: profile.id,
-        created_at: new Date().toISOString()
+        password_hash: null // No hay password para usuarios OAuth
       })
       .select()
       .single();
 
-    if (error) {
-      return done(error, null);
+    if (insertError) {
+      console.error('❌ Error creando usuario:', insertError);
+      return done(insertError, null);
     }
 
+    console.log('✅ Usuario creado exitosamente:', newUser.id);
     return done(null, newUser);
 
   } catch (error) {
+    console.error('❌ Error en Google OAuth:', error);
     return done(error, null);
   }
 }));
